@@ -15,7 +15,7 @@ struct context {
 	HHOOK hook;
 	BOOL muhenkan_pressed;
 	BOOL active;
-	struct keybind keybinds[6];
+	struct keybind keybinds[8];
 	HWND tray_hwnd;
 	NOTIFYICONDATAW nid;
 };
@@ -31,6 +31,14 @@ static struct context ctx = {
 			{
 				.key = 'D',
 				.sent_keycode = VK_END,
+			},
+			{
+				.key = 'W',
+				.sent_keycode = VK_PRIOR,
+			},
+			{
+				.key = 'S',
+				.sent_keycode = VK_NEXT,
 			},
 			{
 				.key = 'H',
@@ -140,7 +148,7 @@ send_key(DWORD keycode, BOOL is_down)
 }
 
 static BOOL
-match_keybind(DWORD keycode, BOOL is_down)
+sync_keybinds(DWORD keycode, BOOL is_down)
 {
 	if (!ctx.active) {
 		return FALSE;
@@ -187,7 +195,7 @@ handle_key_event(int nCode, WPARAM wParam, LPARAM lParam)
 	if (kb_hook->vkCode == VK_NONCONVERT) {
 		ctx.muhenkan_pressed = is_down;
 	}
-	if (match_keybind(kb_hook->vkCode, is_down)) {
+	if (sync_keybinds(kb_hook->vkCode, is_down)) {
 		return 1;
 	}
 	if (kb_hook->vkCode == VK_NONCONVERT) {
