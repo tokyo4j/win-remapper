@@ -7,6 +7,7 @@
 struct keybind {
 	DWORD key;
 	DWORD sent_keycode;
+	int repeat;
 
 	BOOL activated;
 };
@@ -15,7 +16,7 @@ struct context {
 	HHOOK hook;
 	BOOL muhenkan_pressed;
 	BOOL active;
-	struct keybind keybinds[6];
+	struct keybind keybinds[8];
 	HWND tray_hwnd;
 	NOTIFYICONDATAW nid;
 };
@@ -31,6 +32,16 @@ static struct context ctx = {
 			{
 				.key = 'D',
 				.sent_keycode = VK_END,
+			},
+			{
+				.key = 'W',
+				.sent_keycode = VK_UP,
+				.repeat = 5,
+			},
+			{
+				.key = 'S',
+				.sent_keycode = VK_DOWN,
+				.repeat = 5,
 			},
 			{
 				.key = 'H',
@@ -139,28 +150,38 @@ send_key(DWORD keycode, BOOL is_down)
 	SendInput(ARRAYSIZE(inputs), inputs, sizeof(inputs));
 }
 
+static void
+send_repeated_keys(struct keybind *kb)
+{
+	for (int i = 0; i < kb->repeat; i++) {
+		send_key(kb->sent_keycode, TRUE);
+		Sleep(1);
+		send_key(kb->sent_keycode, FALSE);
+		Sleep(1);
+	}
+}
+
 static BOOL
-match_keybind(DWORD keycode, BOOL is_down)
+sync_keybinds(DWORD keycode, BOOL is_down)
 {
 	if (!ctx.active) {
 		return FALSE;
 	}
 	BOOL consumed = FALSE;
-	if (is_down) {
-		for (size_t i = 0; i < ARRAYSIZE(ctx.keybinds); i++) {
-			struct keybind *kb = &ctx.keybinds[i];
+	for (size_t i = 0; i < ARRAYSIZE(ctx.keybinds); i++) {
+		struct keybind *kb = &ctx.keybinds[i];
+		if (is_down) {
 			if (kb->key == keycode && ctx.muhenkan_pressed) {
-				send_key(kb->sent_keycode, TRUE);
-				kb->activated = TRUE;
+				if (kb->repeat) {
+					send_repeated_keys(kb);
+				} else {
+					send_key(kb->sent_keycode, TRUE);
+					kb->activated = is_down;
+				}
 				consumed = TRUE;
 			}
-		}
-	} else {
-		for (size_t i = 0; i < ARRAYSIZE(ctx.keybinds); i++) {
-			struct keybind *kb = &ctx.keybinds[i];
-			if (kb->activated
-				&& (kb->key == keycode
-					|| !ctx.muhenkan_pressed)) {
+		} else {
+			if (kb->activated && (kb->key == keycode || !ctx.muhenkan_pressed)) {
 				send_key(kb->sent_keycode, FALSE);
 				kb->activated = FALSE;
 				consumed = TRUE;
@@ -187,7 +208,7 @@ handle_key_event(int nCode, WPARAM wParam, LPARAM lParam)
 	if (kb_hook->vkCode == VK_NONCONVERT) {
 		ctx.muhenkan_pressed = is_down;
 	}
-	if (match_keybind(kb_hook->vkCode, is_down)) {
+	if (sync_keybinds(kb_hook->vkCode, is_down)) {
 		return 1;
 	}
 	if (kb_hook->vkCode == VK_NONCONVERT) {
